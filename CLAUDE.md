@@ -1,464 +1,361 @@
 # CLAUDE.md
 
-## Project Overview
+# Jarvis Voice Assistant — System Specification
 
-Jarvis is a local voice-activated AI assistant running on a Raspberry Pi 5 or MacBook.
+## Goal
 
-The assistant should:
+Build a lightweight local voice assistant named "Jarvis" that continuously listens in the background for the wake word:
 
-- Continuously listen for a wake word ("Jarvis")
-- Convert speech → text
-- Send requests to the OpenAI Chat API
-- Speak responses aloud
-- Maintain lightweight conversation memory
-- Support future expansion into robotics, vision, and home automation
+    "jarvis"
 
-Primary design goals:
+Once detected:
 
-- Low latency
-- Modular architecture
-- Clean async event-driven code
-- Easy extensibility
-- Human-like interaction loop
-- Stable long-running local execution
+1. Start recording the user's speech
+2. Continue recording until:
+   - 15 seconds max duration
+   - OR 2 seconds of silence detected
+3. Transcribe the speech to text
+4. Print the transcription to terminal
+5. Save interaction into a JSON log file with:
+   - timestamp
+   - raw transcription
+   - duration
+   - confidence (if available)
+
+The system should run continuously with low latency and low CPU usage.
 
 ---
 
-# Core System Architecture
+# Core Requirements
 
-```text
-Microphone
-    ↓
-Wake Word Detection
-    ↓
-Speech-to-Text
-    ↓
-Conversation Manager
-    ↓
-LLM API Call
-    ↓
-Response Parser
-    ↓
-Text-to-Speech
-    ↓
-Speaker Output
+## Wake Word Detection
+
+The assistant should:
+
+- Continuously monitor microphone audio
+- Detect the keyword:
+
+      "jarvis"
+
+- Ignore all other speech
+- Wake word detection should be:
+  - fast
+  - lightweight
+  - non-blocking
+
+Preferred libraries:
+
+- pvporcupine
+- openWakeWord
+- whisper-triggered VAD pipeline
+
+Preferred wake engine:
+
+- Porcupine
+
+---
+
+# Recording Logic
+
+After wake word detection:
+
+## Start Recording
+
+Begin capturing microphone input immediately.
+
+## Stop Conditions
+
+Stop recording when EITHER:
+
+### A.
+
+15 seconds elapsed
+
+OR
+
+### B.
+
+2 continuous seconds of silence detected
+
+Silence detection should use:
+
+- RMS energy
+- VAD (preferred)
+- Silero VAD
+- WebRTC VAD
+
+---
+
+# Transcription
+
+Transcribe recorded audio locally.
+
+Preferred models:
+
+1. faster-whisper
+2. whisper.cpp
+3. openai-whisper
+
+Preferred:
+
+- faster-whisper small.en
+
+Requirements:
+
+- low latency
+- streaming-friendly
+- CPU-compatible
+- Apple Silicon support
+
+---
+
+# JSON Logging
+
+Store all successful interactions in:
+
+    logs/interactions.json
+
+Format:
+
+```json
+[
+  {
+    "timestamp": "2026-05-16T14:22:11",
+    "transcription": "open tradingview and search spy",
+    "duration_seconds": 4.82,
+    "wake_word": "jarvis"
+  }
+]
+```
+
+Append new interactions continuously.
+
+Also save raw WAV recordings in:
+
+```
+recordings/
+```
+
+Filename format:
+
+```
+YYYYMMDD_HHMMSS.wav
 ```
 
 ---
 
-# Tech Stack
+# Project Structure
 
-## Language
-
-- Python 3.11+
-
-## Speech Recognition
-
-Preferred:
-
-- faster-whisper
-
-Fallback:
-
-- OpenAI transcription API
-
-## LLM
-
-Preferred:
-
-- OpenAI Responses API
-
-## Text-to-Speech
-
-Preferred:
-
-- OpenAI TTS
-
-Fallback:
-
-- pyttsx3
-
-## Audio
-
-- sounddevice
-- pyaudio
-- scipy
-
-## Async Runtime
-
-- asyncio
-
-## Environment
-
-- dotenv
-
-## Vision (future)
-
-- OpenCV
-
-## Robotics (future)
-
-- gpiozero
-- RPi.GPIO
-
----
-
-# High-Level Folder Structure
-
-```text
-jarvis/
+```
+Jarvis/
 │
 ├── main.py
-├── CLAUDE.md
+├── config.py
 ├── requirements.txt
-├── .env
-│
-├── config/
-│   └── settings.py
 │
 ├── audio/
-│   ├── microphone.py
-│   ├── playback.py
-│   ├── recorder.py
-│   └── wakeword.py
+│ ├── listener.py
+│ ├── recorder.py
+│ ├── vad.py
+│ └── wakeword.py
 │
-├── speech/
-│   ├── transcribe.py
-│   └── tts.py
+├── transcription/
+│ └── whisper_engine.py
 │
-├── llm/
-│   ├── client.py
-│   ├── prompts.py
-│   └── memory.py
+├── logging/
+│ └── json_logger.py
 │
-├── vision/
-│   └── camera.py
+├── recordings/
 │
-├── robotics/
-│   ├── servos.py
-│   ├── leds.py
-│   └── motors.py
+├── logs/
+│ └── interactions.json
 │
-├── utils/
-│   ├── logger.py
-│   ├── timing.py
-│   └── helpers.py
-│
-└── data/
-    ├── conversations/
-    └── audio_cache/
+└── utils/
+└── time_utils.py
 ```
 
 ---
 
-# Coding Principles
-
-## General Rules
-
-- Prefer readability over cleverness
-- Use type hints everywhere
-- Avoid global mutable state
-- Keep functions small and pure when possible
-- Use async/await for all blocking IO
-- Separate hardware logic from AI logic
-- Every module should have a single responsibility
-
----
-
-# Performance Priorities
-
-Prioritize:
-
-1. Low audio latency
-2. Fast wake-word detection
-3. Streaming responses
-4. Interruptibility
-5. Stable memory usage
-
-Avoid:
-
-- Loading large local LLMs
-- Blocking main event loop
-- Excessive threading
-- Overengineering
-
----
-
-# Wake Word Behavior
+# System Behavior
 
 The assistant should:
 
-- Passively listen continuously
-- Activate only after hearing:
-  - "Jarvis"
-  - configurable future wake words
+- run forever until CTRL+C
+- recover gracefully from audio errors
+- avoid memory leaks
+- avoid blocking the listener loop
+- use threads or async where appropriate
 
-- Ignore background speech
-- Debounce repeated activations
+Preferred architecture:
 
-Future support:
-
-- Porcupine wake word engine
-
----
-
-# Conversation Behavior
-
-Jarvis should:
-
-- Be concise by default
-- Sound intelligent but conversational
-- Avoid overly verbose answers
-- Respond quickly
-- Maintain short conversational memory
-- Support interruption while speaking
+- background listener thread
+- event queue
+- recorder worker
+- transcription worker
 
 ---
 
-# Memory System
-
-Conversation memory should:
-
-- Store recent exchanges
-- Summarize old context periodically
-- Persist lightweight session history locally
-
-Avoid:
-
-- Huge vector DBs initially
-- Premature RAG systems
-- Complex orchestration frameworks
-
----
-
-# API Guidelines
-
-## OpenAI
+# Audio Settings
 
 Use:
 
-- latest lightweight chat model
-- streaming responses when possible
+- mono audio
+- 16kHz sample rate
+- int16 PCM
 
-Never:
+Preferred libraries:
 
-- hardcode API keys
-- expose secrets in logs
-
-Environment variables:
-
-```env
-OPENAI_API_KEY=...
-```
+- sounddevice
+- pyaudio
+- numpy
 
 ---
 
-# Audio Pipeline
+# Silence Detection
 
-Preferred pipeline:
-
-```text
-Mic Input
-→ VAD
-→ Wake Word
-→ Record Command
-→ Whisper Transcription
-→ GPT Response
-→ TTS Audio Stream
-→ Speaker
-```
-
-Target latency:
-
-- Wake detection: <200ms
-- Transcription: <2s
-- First spoken token: <1s after response starts
-
----
-
-# Logging
-
-Use structured logs.
-
-Every major subsystem should log:
-
-- startup
-- shutdown
-- errors
-- latency
-- API timings
-
-Avoid excessive console spam.
-
----
-
-# Future Features
-
-## Near-Term
-
-- Streaming TTS
-- Interrupt detection
-- Better memory
-- Webcam integration
-- Local command execution
-
-## Medium-Term
-
-- Servo head tracking
-- Facial recognition
-- Smart home integration
-- Desktop control
-
-## Long-Term
-
-- Autonomous robotics
-- Multi-agent planning
-- Local small models
-- Full embodied assistant
-
----
-
-# Robotics Philosophy
-
-Do NOT tightly couple robotics to LLM logic.
-
-The LLM should:
-
-- issue high-level intents
-
-Hardware layer should:
-
-- safely execute commands
-
-Example:
-
-```text
-LLM:
-"Turn head left"
-
-Robotics Layer:
-servo_controller.rotate(30)
-```
-
----
-
-# Development Style
+Use VAD-based stopping.
 
 Preferred:
 
-- incremental development
-- test each subsystem independently
-- CLI-first debugging
-- modular iteration
+- Silero VAD
 
-Avoid:
+Fallback:
 
-- giant rewrites
-- premature abstractions
-- unnecessary frameworks
+- RMS threshold
 
----
+Recording should stop after:
 
-# First MVP Goals
+```
+2 seconds of continuous silence
+```
 
-Version 1 should only do:
-
-1. Listen
-2. Detect wake word
-3. Transcribe speech
-4. Query GPT
-5. Speak response
-
-Nothing else.
-
-Do NOT add:
-
-- robotics
-- databases
-- ROS
-- local LLM hosting
-- distributed systems
-
-until the MVP is stable.
+NOT cumulative silence.
 
 ---
 
-# Example MVP Interaction
+# Terminal Output
 
-User:
-"Jarvis, explain transformers."
+Example:
 
-Pipeline:
+[JARVIS ACTIVE]
 
-- wake word detected
-- audio recorded
-- speech transcribed
-- GPT queried
-- response spoken aloud
+Listening for wake word...
 
----
+Wake word detected.
 
-# Preferred Libraries
+Recording...
 
-## Strongly Preferred
+Transcription:
 
-- asyncio
-- faster-whisper
-- openai
-- sounddevice
-- numpy
+> open tradingview and search spy
 
-## Avoid Initially
+Saved:
 
-- ROS
-- LangChain
-- Kubernetes
-- Docker orchestration
-- heavy agent frameworks
+- recordings/20260516_142211.wav
+- logs/interactions.json
 
 ---
 
-# Deployment Targets
+# Performance Goals
 
-Primary:
+Target:
 
-- Raspberry Pi 5
+- wake latency < 300ms
+- transcription latency < 2s
+- CPU efficient
+- works on:
+  - MacBook Apple Silicon
+  - Raspberry Pi 5
 
-Secondary:
+---
 
-- MacBook Apple Silicon
+# Future Extensions
 
-Future:
+The architecture should support future modules:
 
-- Jetson Orin
+- ChatGPT API calls
+- browser automation
+- desktop automation
+- Home Assistant integration
+- speaker verification
+- TTS responses
+- streaming transcription
+- GUI overlay
+- multi-agent orchestration
+
+Design all components modularly.
 
 ---
 
 # Code Quality
 
-All production code should:
+Requirements:
 
-- pass ruff
-- pass mypy
-- avoid duplicated logic
-- include docstrings
-- include timing instrumentation
+- typed Python
+- clean modular architecture
+- dataclasses where useful
+- minimal global state
+- robust exception handling
+- logging module usage
+- reusable components
+
+Avoid:
+
+- giant monolithic scripts
+- blocking infinite loops
+- hardcoded paths
+- duplicated logic
 
 ---
 
-# Final Philosophy
+# Preferred Dependencies
 
-Jarvis should feel:
+- pvporcupine
+- sounddevice
+- numpy
+- scipy
+- faster-whisper
+- silero-vad
+- torch
+- webrtcvad
 
-- responsive
-- intelligent
-- calm
-- reliable
-- local-first
-- extensible
+---
 
-The system should prioritize simplicity and iteration speed over maximal complexity.
+# Expected Workflow
 
-```
+1. Launch assistant
 
-```
+2. Assistant waits silently
+
+3. User says:
+
+   ```
+   "jarvis"
+   ```
+
+4. Assistant starts recording
+
+5. User speaks command
+
+6. Silence detected OR 15s elapsed
+
+7. Audio transcribed
+
+8. Result printed
+
+9. JSON log updated
+
+10. Return to listening state
+
+---
+
+# Success Criteria
+
+The project is successful if:
+
+- wake word reliably triggers
+- recording automatically stops correctly
+- transcriptions are accurate
+- logs are persisted correctly
+- system can run continuously for hours
+- architecture is extensible for future AI tooling
