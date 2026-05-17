@@ -40,7 +40,7 @@ do
 
     URL="https://www.tradingview.com/chart/?symbol=${TICKER}&interval=D&theme=dark"
 
-    echo "Launching $TICKER"
+    # echo "Launching $TICKER"
 
     osascript <<EOF
 tell application "Safari"
@@ -57,7 +57,7 @@ EOF
     # get current frontmost Safari window
     WINDOW_ID=$(yabai -m query --windows --window | jq '.id')
 
-    echo "Window ID: $WINDOW_ID"
+    # echo "Window ID: $WINDOW_ID"
 
     # move to monitor
     yabai -m window "$WINDOW_ID" --display $DISPLAY
@@ -71,4 +71,4 @@ done
 # focus target monitor
 yabai -m display --focus $DISPLAY
 
-echo "Done."
+# echo "Done."

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import queue
+import re
 import threading
+import sys
 import time
+import subprocess
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -26,6 +29,11 @@ _SILENCE_HALLUCINATIONS = {"thank you.", "thank you", ".", "you.", "the.", "you"
 _POST_RECORD_COOLDOWN = 1.5
 
 
+def _normalize(text: str) -> str:
+    """Lowercase and strip punctuation so Whisper augmentations don't break matching."""
+    return re.sub(r"[^\w\s]", "", text).strip().lower()
+
+
 class JarvisListener:
     """Orchestrates the full pipeline: wake word → record → transcribe → log.
 
@@ -46,6 +54,7 @@ class JarvisListener:
 
         self._audio_queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=200)
         self._transcription_queue: queue.Queue[tuple] = queue.Queue()
+        self._execution_queue: queue.Queue[tuple] = queue.Queue()
 
         self._whisper = WhisperEngine(config)
         self._wake_detector = WakeWordDetector(config)
@@ -69,6 +78,11 @@ class JarvisListener:
             target=self._transcription_worker, daemon=True, name="transcription-worker"
         )
         transcription_thread.start()
+
+        execution_worker_thread = threading.Thread(
+            target=self._execution_worker, daemon=True, name="execution-worker"
+        )
+        execution_worker_thread.start()
 
         def audio_callback(
             indata: np.ndarray, frames: int, time_info, status
@@ -195,9 +209,28 @@ class JarvisListener:
                         duration_seconds=duration,
                         wake_word=self._config.wake_word.keyword,
                     )
+                    self._execution_queue.put((text, timestamp))
                 else:
                     logger.debug("Skipping hallucinated transcription: %r", text)
             except Exception as exc:
                 logger.error("Transcription failed: %s", exc, exc_info=True)
             finally:
                 print("  Listening...\n")
+
+    def _execution_worker(self) -> None:
+        """Placeholder for future command execution logic."""
+        while not self._stop_event.is_set():
+            try:
+                text, timestamp = self._execution_queue.get(timeout=0.5)
+                if text and text.strip():
+                    command = _normalize(text)
+                    if command == "launch charts":
+                        # logger.info("Executing command: Launching charts...")
+                        subprocess.Popen(["bash", "./actions/launch_charts.sh"])
+                    elif command == "stop" or command == "exit":
+                        logger.info("Executing command: Stopping Jarvis...")
+                        self.stop()
+                        sys.exit(0)
+
+            except queue.Empty:
+                continue
