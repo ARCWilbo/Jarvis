@@ -226,7 +226,7 @@ class JarvisListener:
                     command = _normalize(text)
                     if command == "launch charts":
                         # logger.info("Executing command: Launching charts...")
-                        subprocess.Popen(["bash", "./actions/launch_charts.sh"])
+                        subprocess.Popen(["bash", "./commands/launch_charts.sh"])
                     elif command == "stop" or command == "exit":
                         logger.info("Executing command: Stopping Jarvis...")
                         self.stop()

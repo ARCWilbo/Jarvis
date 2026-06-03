@@ -1,14 +1,14 @@
 [
   {
-    "timestamp": "2026-05-17T14:04:23",
-    "transcription": "How old are you?",
-    "duration_seconds": 3.1,
+    "timestamp": "2026-06-02T14:17:57",
+    "transcription": "The whole dream.",
+    "duration_seconds": 3.26,
     "wake_word": "jarvis"
   },
   {
-    "timestamp": "2026-05-17T14:04:29",
-    "transcription": "exit",
-    "duration_seconds": 3.17,
+    "timestamp": "2026-06-02T14:18:07",
+    "transcription": "How old are you?",
+    "duration_seconds": 4.74,
     "wake_word": "jarvis"
   }
 ]
